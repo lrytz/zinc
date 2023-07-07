@@ -14,8 +14,7 @@ package xsbt
 import java.io.File
 import java.{ util => ju }
 import ju.Optional
-
-import scala.reflect.internal.util.{ FakePos, NoPosition, Position }
+import scala.reflect.internal.util.{ CodeAction, FakePos, NoPosition, Position }
 // Left for compatibility
 import Compat._
 import scala.collection.JavaConverters._
@@ -212,7 +211,15 @@ private final class DelegatingReporter(
     delegate.reset()
   }
 
-  protected def info0(pos: Position, msg: String, rawSeverity: Severity, force: Boolean): Unit = {
+  protected def info0(pos: Position, msg: String, rawSeverity: Severity, force: Boolean): Unit =
+    doReport(pos, msg, rawSeverity, Nil)
+
+  override def doReport(
+      pos: Position,
+      msg: String,
+      rawSeverity: Severity,
+      actions: List[CodeAction]
+  ): Unit = {
     val skip = rawSeverity == WARNING && noWarn
     if (!skip) {
       val severity = if (warnFatal && rawSeverity == WARNING) ERROR else rawSeverity
@@ -224,17 +231,18 @@ private final class DelegatingReporter(
         rendered0 = None,
         diagnosticCode0 = None,
         diagnosticRelatedInformation0 = Nil,
-        actions0 = getActions(pos, pos1, msg)
+        actions0 = actions.map(a =>
+          action(
+            a.title,
+            a.description,
+            workspaceEdit(a.edits.map(e =>
+              textEdit(DelegatingReporter.convert(e.position), e.newText)
+            ))
+          )
+        )
       ))
     }
   }
-
-  private def getActions(pos: Position, pos1: xsbti.Position, msg: String): List[Action] =
-    if (pos.isRange) Nil
-    else if (msg.startsWith("procedure syntax is deprecated:")) {
-      val edit = workspaceEdit(List(textEdit(pos1, ": Unit = {")))
-      action("procedure syntax", None, edit) :: Nil
-    } else Nil
 
   import xsbti.Severity.{ Info, Warn, Error }
   private[this] def convert(sev: Severity): xsbti.Severity = sev match {
