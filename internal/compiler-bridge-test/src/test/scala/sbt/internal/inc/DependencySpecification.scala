@@ -190,6 +190,34 @@ class DependencySpecification
     assert(inheritance === Set(("A", "B", NameKind.Term), ("B", "C", NameKind.Type)))
   }
 
+  it should "record whether a selected member belongs to a class or its companion object" in {
+    val srcA =
+      """trait T { def inherited: Int = 0 }
+        |class A { def x: Int = 1; def y: Int = 2; def w: Int = 3 }
+        |object A extends T { def x: String = ""; def z: Int = 4; def w: Int = 5 }""".stripMargin
+    val srcB =
+      """import A.z
+        |class B {
+        |  def fromObject: String = A.x
+        |  def fromClass(a: A): Int = a.y
+        |  def fromBoth(a: A): Int = a.w + A.w
+        |  def fromTrait: Int = A.inherited
+        |  def fromImport: Int = z
+        |  def structural(m: { def s: Int }): Int = m.s
+        |}""".stripMargin
+    val (_, callback) = compileSrcs(srcA, srcB)
+    val owners = callback.usedNameOwnerKinds("B")
+    assert(owners("x") === Set(NameKind.Term))
+    assert(owners("y") === Set(NameKind.Type))
+    assert(owners("w") === Set(NameKind.Type, NameKind.Term))
+    // could be overridden or overloaded in object A
+    assert(owners("inherited") === Set(NameKind.Type, NameKind.Term))
+    // an import selector has no symbol
+    assert(owners("z") === Set(NameKind.Type, NameKind.Term))
+    // any class or object can define a structural member
+    assert(owners("s") === Set(NameKind.Type, NameKind.Term))
+  }
+
   private def extractClassDependenciesPublic: ExtractedClassDependencies = {
     val srcA = "class A"
     val srcB = "class B extends D[A]"

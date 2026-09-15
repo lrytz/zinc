@@ -961,27 +961,30 @@ private final class AnalysisCallback(
     ()
   }
 
-  // `ownerKinds` is not used yet, it was added in preparation for fixing sbt/zinc#1796
   override def usedName(
       className: String,
       name: String,
       ownerKinds: EnumSet[NameKind],
       useScopes: EnumSet[UseScope]
-  ): Unit = usedName(className, name, useScopes)
+  ): Unit =
+    addUsedName(
+      className,
+      name,
+      AnalysisInterner.scopeBits(useScopes) | AnalysisInterner.ownerKindBits(ownerKinds)
+    )
 
-  def usedName(className: String, name: String, useScopes: EnumSet[UseScope]) = {
+  // Bridges that do not report owner kinds land here: a name without owner bits matches both.
+  def usedName(className: String, name: String, useScopes: EnumSet[UseScope]) =
+    addUsedName(className, name, AnalysisInterner.scopeBits(useScopes))
+
+  private def addUsedName(className: String, name: String, bits: Int): Unit = {
     // Canonicalize freshly-produced used names and their strings into the
     // process-wide pools, so a just-compiled analysis shares them with every
     // other resident analysis. (Api tree nodes are deduped only when an
     // analysis is deserialized, not on this fresh-compile path.)
     usedNames
       .getOrElseUpdate(className, ConcurrentHashMap.newKeySet[UsedName].asScala)
-      .add(
-        AnalysisInterner.usedName(
-          AnalysisInterner.internString(name),
-          AnalysisInterner.scopeBits(useScopes)
-        )
-      )
+      .add(AnalysisInterner.usedName(AnalysisInterner.internString(name), bits))
     ()
   }
 

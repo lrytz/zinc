@@ -19,6 +19,7 @@ import xsbti.api.{ ClassLike, DependencyContext }
 import xsbti.compile.analysis.ReadSourceInfos
 
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters.*
 
 class TestCallback extends AnalysisCallback4 {
   case class TestUsedName(name: String, scopes: ju.EnumSet[UseScope])
@@ -33,6 +34,11 @@ class TestCallback extends AnalysisCallback4 {
     scala.collection.mutable.Map.empty[Path, VirtualFileRef]
   val usedNamesAndScopes =
     scala.collection.mutable.Map.empty[String, Set[TestUsedName]].withDefaultValue(Set.empty)
+  // for each class, the owner kinds reported for each of its used names
+  val usedNameOwnerKinds =
+    scala.collection.mutable.Map
+      .empty[String, Map[String, Set[NameKind]]]
+      .withDefaultValue(Map.empty)
   val classNames =
     scala.collection.mutable.Map
       .empty[VirtualFileRef, Set[(String, String)]]
@@ -140,7 +146,11 @@ class TestCallback extends AnalysisCallback4 {
       name: String,
       ownerKinds: ju.EnumSet[NameKind],
       scopes: ju.EnumSet[UseScope]
-  ): Unit = usedName(className, name, scopes)
+  ): Unit = {
+    usedNameOwnerKinds(className) += (name -> (usedNameOwnerKinds(className)
+      .getOrElse(name, Set.empty) ++ ownerKinds.asScala))
+    usedName(className, name, scopes)
+  }
 
   override def api(source: File, api: ClassLike): Unit = ???
 
